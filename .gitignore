@@ -12,3 +12,5 @@ artifacts
 venv/
 __pycache__/
 .pytest-cache/
+
+.idea

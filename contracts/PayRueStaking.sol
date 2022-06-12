@@ -6,9 +6,9 @@
 * - Users stake token A and receive token B. These can be same or different tokens.
 * - APY is configurable with rewardNumerator/rewardDenominator -- with 1 and 1 it's 100%, which means
     you stake 10 000 PROPEL, you get 10 000 PROPEL as rewards during the next year
-* - Each stake is guaranteed the reward in 365 days, after which they can still get new rewards if
+* - Each stake is guaranteed the reward in 180 days, after which they can still get new rewards if
 *   there is reward money left in the contract. If the reward cannot be guaranteed, the stake will not be accepted.
-* - Each stake is locked for 365 days, after which it can be unstaked or left in the contract
+* - Each stake is locked for 180 days, after which it can be unstaked or left in the contract
 */
 pragma solidity ^0.8.0;
 
@@ -48,8 +48,7 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
         Stake[] stakes;
     }
 
-    uint256 public constant lockedPeriod = 365 days;
-    uint256 public constant yieldPeriod = 365 days;
+    uint256 public constant yieldPeriod = 180 days;
 
     IERC20 public stakingToken;
     IERC20 public rewardToken;
@@ -62,6 +61,8 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
     bool public paused = false;
 
     mapping(address => UserStakingData) stakingDataByUser;
+
+    uint256 public totalPenaltyAmount = 0;
 
     uint256 public totalAmountStaked = 0;
     uint256 public totalGuaranteedReward = 0;
@@ -98,7 +99,7 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
     {
         require(!paused, "Staking is temporarily paused, no new stakes accepted");
         require(!emergencyWithdrawalInProgress, "Emergency withdrawal in progress, no new stakes accepted");
-        require(amount >= minStakeAmount, "Minimum stake amount not met");
+        require(amount > 0, "Minimum stake amount not met");
         // This needs to be checked before accepting the stake, in case stakedToken and rewardToken are the same
         require(
             availableToStake() >= amount,
@@ -272,7 +273,7 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
     onlyOwner
     nonReentrant
     {
-        require(newMinStakeAmount > 1, "Minimum stake amount must be at least 1");
+        require(newMinStakeAmount > 0, "Minimum stake amount must be at least 1");
         minStakeAmount = newMinStakeAmount;
     }
 
@@ -376,6 +377,7 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
         _updateStoredReward(userData);
 
         uint256 amountLeft = amount;
+        uint256 penaltyAmount = 0;
 
         uint256 i = userData.firstActiveStakeIndex;
         for (; i < userData.stakes.length; i++) {
@@ -383,10 +385,6 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
                 continue;
             }
 
-            require(
-                userData.stakes[i].timestamp <= block.timestamp - lockedPeriod,
-                "Unstaking is only allowed after the locked period has expired"
-            );
             if (userData.stakes[i].amount > amountLeft) {
                 userData.stakes[i].amount -= amountLeft;
                 amountLeft = 0;
@@ -397,6 +395,17 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
                 userData.stakes[i].amount = 0;
                 delete userData.stakes[i];  // this should be safe and saves a little bit of gas, but also leaves a gap in the array
             }
+
+            //calculate penalty amount
+            uint256 daysStaked = (block.timestamp - userData.stakes[i].timestamp) / 60 / 60 / 24;
+            if(daysStaked < 90){
+                penaltyAmount += amount - ((amount * 20) / 100);
+            } else if ( daysStaked >= 90 && daysStaked < 150) {
+                penaltyAmount += amount - ((amount * 15) / 100);
+            } else if (daysStaked >= 150 && daysStaked < 180) {
+                penaltyAmount += amount - ((amount * 10) / 100);
+            }
+            totalPenaltyAmount += penaltyAmount;
         }
 
         require(
@@ -421,7 +430,7 @@ contract PayRueStaking is ReentrancyGuard, Ownable {
         }
 
         require(
-            stakingToken.transfer(msg.sender, amount),
+            stakingToken.transfer(msg.sender, amount - penaltyAmount),
             "Transferring staked token back to sender failed"
         );
 
