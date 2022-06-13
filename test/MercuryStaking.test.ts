@@ -26,44 +26,44 @@ interface TestConfig {
 // We run all tests both with the regular contract and that contract, to catch even more bugs.
 const CONFIGS: TestConfig[] = [
     {
-        contractName: 'PayRueStaking',
+        contractName: 'MercuryStaking',
         stakingTokenIsRewardToken: true,
     },
     {
-        contractName: 'PayRueStaking',
+        contractName: 'MercuryStaking',
         stakingTokenIsRewardToken: false,
     },
     {
-        contractName: 'InvariantCheckedPayRueStaking',
+        contractName: 'InvariantCheckedMercuryStaking',
         stakingTokenIsRewardToken: true,
     },
     {
-        contractName: 'InvariantCheckedPayRueStaking',
+        contractName: 'InvariantCheckedMercuryStaking',
         stakingTokenIsRewardToken: false,
     },
     {
-        contractName: 'PayRueStaking',
+        contractName: 'MercuryStaking',
         stakingTokenIsRewardToken: false,
-        rewardNumerator: 1249_653022,
-        rewardDenominator:  1_000000,
+        rewardNumerator: 1,
+        rewardDenominator:  10,
     },
     {
-        contractName: 'PayRueStaking',
+        contractName: 'MercuryStaking',
         stakingTokenIsRewardToken: true,
-        rewardNumerator: 1249_653022,
-        rewardDenominator:  1_000000,
+        rewardNumerator: 1,
+        rewardDenominator:  10,
     },
     {
-        contractName: 'InvariantCheckedPayRueStaking',
+        contractName: 'InvariantCheckedMercuryStaking',
         stakingTokenIsRewardToken: false,
-        rewardNumerator: 1249_653022,
-        rewardDenominator:  1_000000,
+        rewardNumerator: 1,
+        rewardDenominator:  10,
     },
     {
-        contractName: 'InvariantCheckedPayRueStaking',
+        contractName: 'InvariantCheckedMercuryStaking',
         stakingTokenIsRewardToken: true,
-        rewardNumerator: 1249_653022,
-        rewardDenominator:  1_000000,
+        rewardNumerator: 1,
+        rewardDenominator:  10,
     },
 ];
 
@@ -111,8 +111,8 @@ for (let {
                 rewardToken = await TestToken.deploy("Reward token", "REWARD");
             }
 
-            const PayRueStaking = await ethers.getContractFactory(contractName);
-            adminStaking = await PayRueStaking.deploy(
+            const MercuryStaking = await ethers.getContractFactory(contractName);
+            adminStaking = await MercuryStaking.deploy(
                 stakingToken.address,
                 rewardToken.address,
                 rewardNumerator,
@@ -431,6 +431,55 @@ for (let {
                 tx = await staking.connect(anotherAccount).exit();
                 expect(await getTokenBalanceChange(tx, stakingToken, anotherAccount)).to.equal(eth('15 000'));
             });
+
+
+            if (rewardNumerator === 1 && rewardDenominator === 10) {
+                it('double-check Mercury-specific calculated amounts', async () => {
+                    await initTest({
+                        stakedAmount: '20 000',
+                    });
+                    expect(await staking.rewardClaimable(stakerAddress)).to.equal(0);
+
+                    await timeTravel({ days: 365, mine: true });
+                    expect(await staking.rewardClaimable(stakerAddress)).to.equal(
+                        eth('2 000')
+                    );
+                });
+
+                it('double-check Mercury-specific claimed amounts amounts', async () => {
+                    await initTest({
+                        stakedAmount: '12 345',
+                    });
+
+                    await timeTravel({ days: 181, hours: 12, mine: true });
+                    await timeTravel({ days: 183, hours: 12 });
+
+                    let tx: any;
+                    await expect(
+                        () => tx = staking.claimReward(),
+                    ).to.changeTokenBalances(
+                        rewardToken,
+                        [stakerAccount, staking],
+                        [eth('1 234.5'), eth('-1 234.5')]
+                    );
+
+                    await expect(tx).to.emit(staking, 'RewardPaid').withArgs(
+                        stakerAddress,
+                        eth('1 234.5'),
+                    );
+
+                    await timeTravel({ days: 182, hours: 12 });
+
+
+                    await expect(
+                        () => tx = staking.claimReward(),
+                    ).to.changeTokenBalances(
+                        rewardToken,
+                        [stakerAccount, staking],
+                        [eth('617.25'), eth('-617.25')]
+                    );
+                });
+            }
         });
 
         describe('exit', () => {
