@@ -2,10 +2,10 @@
 pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
-import "../PayRueStaking.sol";
+import "../MercuryStaking.sol";
 
 // Inspired by: https://muellerberndt.medium.com/catching-weird-security-bugs-in-solidity-smart-contracts-with-invariant-checks-435582dfb5bd
-contract InvariantCheckedPayRueStaking is PayRueStaking {
+contract InvariantCheckedMercuryStaking is MercuryStaking {
     address[] public stakers;
     mapping(address => bool) public isStaker;
     uint256 public deployedOn;
@@ -144,8 +144,6 @@ contract InvariantCheckedPayRueStaking is PayRueStaking {
                 Stake storage userStake = userData.stakes[j];
                 totalAmountStakedCalculatedFromStakes += userStake.amount;
                 if (userStake.amount < lowestMinStakeAmount) {
-                    // fully or partially unstaked, enforce timestamp is ok
-                    require(userStake.timestamp <= block.timestamp + lockedPeriod);
                     // previous must also be (fully) unstaked
                     if (j > 0) {
                         require(userData.stakes[j - 1].amount == 0);
@@ -224,7 +222,7 @@ contract InvariantCheckedPayRueStaking is PayRueStaking {
         uint256 _rewardNumerator,
         uint256 _rewardDenominator
     )
-    PayRueStaking(_stakingToken, _rewardToken, _rewardNumerator, _rewardDenominator)
+    MercuryStaking(_stakingToken, _rewardToken, _rewardNumerator, _rewardDenominator)
     {
         deployedOn = block.timestamp;
         lowestMinStakeAmount = minStakeAmount;
